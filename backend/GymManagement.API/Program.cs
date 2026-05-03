@@ -16,6 +16,13 @@ using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // Settings
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 
@@ -141,31 +148,52 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 builder.Services.AddSwaggerGen();
 
-// CORS
+// CORS — Render demo: RenderDemo__RelaxCors=true allows any https://*.onrender.com (no manual AllowedOrigins sync).
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        var raw = builder.Configuration["AllowedOrigins"] ?? string.Empty;
-        var origins = raw
-            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(origin => origin.Trim().TrimEnd('/'))
-            .Where(origin => !string.IsNullOrWhiteSpace(origin))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (origins.Length == 0)
+        var relaxDemo = builder.Configuration.GetValue<bool>("RenderDemo:RelaxCors");
+        if (relaxDemo)
         {
-            origins =
-            [
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "https://ha-salon-7b4c.onrender.com"
-            ];
+            policy.SetIsOriginAllowed(static origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin))
+                    return false;
+                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                    return false;
+                if (string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase) &&
+                    uri.Host.EndsWith(".onrender.com", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (string.Equals(uri.Scheme, "http", StringComparison.OrdinalIgnoreCase) &&
+                    (uri.Host == "localhost" || uri.Host == "127.0.0.1"))
+                    return true;
+                return false;
+            });
+        }
+        else
+        {
+            var raw = builder.Configuration["AllowedOrigins"] ?? string.Empty;
+            var origins = raw
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(origin => origin.Trim().TrimEnd('/'))
+                .Where(origin => !string.IsNullOrWhiteSpace(origin))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (origins.Length == 0)
+            {
+                origins =
+                [
+                    "http://localhost:5173",
+                    "http://localhost:5174"
+                ];
+            }
+
+            policy.WithOrigins(origins);
         }
 
-        policy.WithOrigins(origins)
-            .AllowAnyHeader()
+        policy.AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
     });
@@ -174,6 +202,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 var renderPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(renderPort))
@@ -189,10 +219,6 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.UseMiddleware<ExceptionMiddleware>();
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -209,6 +235,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<ActivityLogMiddleware>();
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapControllers();
 
 app.Run();
