@@ -1,17 +1,23 @@
+# Render Blueprint: PostgreSQL + API (Docker / .NET 9) + static Vite frontend.
+# Render native "dotnet" runtime is not offered; API must use Docker.
+# Dashboard: New + → Blueprint → connect repo → apply this file.
+
 databases:
   - name: gym-postgres
     plan: free
+    region: oregon
     databaseName: gymmanagement
     user: gym
 
 services:
   - type: web
     name: gym-api
-    runtime: dotnet
+    runtime: docker
     plan: free
-    rootDir: backend/GymManagement.API
-    buildCommand: dotnet restore && dotnet publish -c Release -o out
-    startCommand: dotnet out/GymManagement.API.dll
+    region: oregon
+    dockerfilePath: ./backend/GymManagement.API/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
@@ -39,13 +45,16 @@ services:
         value: Admin
       - key: MemberSeed__Enabled
         value: "false"
-      - key: AllowedOrigins
-        sync: false
+      # Demo: allow any https://*.onrender.com without listing AllowedOrigins.
+      # For strict CORS, set to false and set AllowedOrigins in the dashboard.
+      - key: RenderDemo__RelaxCors
+        value: "true"
 
   - type: web
     name: gym-frontend
     runtime: static
     plan: free
+    region: oregon
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
@@ -55,4 +64,7 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        sync: false
+        fromService:
+          name: gym-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
