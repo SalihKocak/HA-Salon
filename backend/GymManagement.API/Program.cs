@@ -178,6 +178,7 @@ var app = builder.Build();
 var renderPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(renderPort))
 {
+    app.Urls.Clear();
     app.Urls.Add($"http://0.0.0.0:{renderPort}");
 }
 
