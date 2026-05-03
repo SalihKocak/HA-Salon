@@ -1,89 +1,57 @@
-# Render Demo Kurulum Rehberi
+# Render demo rehberi (HA Salon / Gym)
 
-Bu rehber, projeyi Render uzerinde **ayri backend + ayri frontend + ayri PostgreSQL** olarak canliya almak icin hazirlandi.
+Bu rehber, projeyi Render uzerinde **PostgreSQL + Docker API + statik Vite frontend** olarak demo link verecek sekilde aciklar.
 
-## 1) Mevcut proje yapisi (ozet)
+## Onemli: .NET ve Docker
 
-- `backend/GymManagement.API`: .NET 9 Web API (Render web service)
-- `backend/GymManagement.Infrastructure`: EF Core, migrationlar, servis implementasyonlari
-- `backend/GymManagement.Application`: DTO ve interface katmani
-- `backend/GymManagement.Domain`: entity/domain katmani
-- `frontend`: React + Vite istemci (Render static service)
-- `docker-compose.yml`: lokal PostgreSQL
-- `render.yaml`: Render blueprint (db + api + frontend)
+Render, [.NET icin native runtime sunmuyor](https://render.com/docs/language-support); **API Docker ile** calisir. `render.yaml` icinde `gym-api` servisi `runtime: docker` ve `dockerContext: ./backend` kullanir.
 
-## 2) Render uzerinde olusacak servisler
+## 1) Proje yapisi
 
-`render.yaml` ile olusacaklar:
+- `backend/GymManagement.API` — .NET 9 Web API, `Dockerfile`
+- `backend/.dockerignore` — build hizlandirma
+- `frontend` — React + Vite (`VITE_API_URL` build zamaninda sabitlenir)
+- `render.yaml` — Blueprint (veritabani + API + static site)
 
-- PostgreSQL DB: `gym-postgres`
-- Backend API: `gym-api`
-- Frontend Static: `gym-frontend`
+## 2) Blueprint ile kurulum
 
-## 3) Deploy oncesi kontrol listesi
+1. Kodu GitHub'a push et.
+2. Render → **New +** → **Blueprint**.
+3. `HA-Salon` (veya) repoyu sec; `render.yaml` otomatik okunur.
+4. Olusturulan kaynaklar: `gym-postgres`, `gym-api`, `gym-frontend` (hepsi **Oregon** bolgesi).
 
-1. Projeyi GitHub'a push et.
-2. Render hesabinda **New + -> Blueprint** sec.
-3. Repo'yu secip `render.yaml` okut.
-4. Ilk deploy tamamlaninca asagidaki environment degerlerini doldur.
+## 3) Ortam degiskenleri (otomatik)
 
-## 4) Backend (`gym-api`) environment ayarlari
+| Servis | Degisken | Kaynak |
+|--------|----------|--------|
+| gym-api | `ConnectionStrings__DefaultConnection` | `fromDatabase` |
+| gym-api | `Jwt__SecretKey`, `AdminSeed__Password` | `generateValue: true` |
+| gym-api | `RenderDemo__RelaxCors` | `true` → CORS: `https://*.onrender.com` + localhost |
+| gym-frontend | `VITE_API_URL` | `gym-api` servisinin `RENDER_EXTERNAL_URL` (origin; koda `/api` eklenir) |
 
-`render.yaml` ile otomatik gelen kritik alanlar:
+Ilk deployda static site buildi bazen API URL’sine bagli kalir: **gym-frontend** “build failed” verirse, `gym-api` ayaga kalktiktan sonra **gym-frontend** icin **Manual Deploy** yap.
 
-- `ASPNETCORE_ENVIRONMENT=Production`
-- `ConnectionStrings__DefaultConnection` (Render DB'den geliyor)
-- `Jwt__SecretKey` (otomatik generate)
-- `AdminSeed__Password` (otomatik generate)
+## 4) Demo linki paylasimi
 
-Manuel girilecek zorunlu alan:
+- **Kullaniciya verilecek URL:** `https://gym-frontend-....onrender.com` (Blueprint’teki static site adresi; Render panosundan kopyala).
+- **Admin girisi:** `AdminSeed__Email` (varsayilan `admin@gym.demo`) + Render’da `gym-api` → Environment → `AdminSeed__Password` degeri.
 
-- `AllowedOrigins=https://<senin-frontend-adresin>.onrender.com`
+## 5) Uretim / siki CORS
 
-Not:
-- API acildiginda `Program.cs` icinde migration otomatik calisir.
-- `PORT` Render tarafindan verilir, uygulama bunu okuyup `0.0.0.0:<PORT>` dinler.
+`RenderDemo__RelaxCors` degerini `false` yap ve `AllowedOrigins` icine yalnizca kendi frontend URL’ini yaz (virgulle birden fazla mumkun).
 
-## 5) Frontend (`gym-frontend`) environment ayarlari
+## 6) Saglik kontrolu
 
-Manuel girilecek zorunlu alan:
+- `GET https://<gym-api>/health` → `{ "status": "ok" }` (Render health check bu path’i kullanir).
 
-- `VITE_API_URL=https://<senin-backend-adresin>.onrender.com/api`
+## 7) Sik sorunlar
 
-Sonra frontend servisini **Redeploy** et (Vite build zamani env sabitlenir).
+- **Docker build “COPY” hatasi:** Render’da `dockerContext` mutlaka repo kokuine gore `./backend` olmali (bu dosyada ayarli).
+- **CORS:** Demo modunda `RelaxCors` acikken manuel `AllowedOrigins` gerekmez.
+- **401 / token:** Normal auth akisi; sifre yanlis veya token suresi dolmus olabilir.
+- **DB baglantisi:** Blueprint’teki Postgres ile API ayni `region` (oregon) olmali.
 
-## 6) Ilk giris (demo hesabı)
-
-Email:
-
-- `admin@gym.demo`
-
-Sifre:
-
-- Render `gym-api` servisindeki `AdminSeed__Password` degerini kopyala.
-
-## 7) Demo linkini gondermeden once test
-
-1. Frontend aciliyor mu:
-   - `https://<frontend>.onrender.com`
-2. Login calisiyor mu.
-3. Dashboard verisi geliyor mu.
-4. Browser console'da CORS hatasi yok mu.
-5. API endpoint kontrolu:
-   - `https://<backend>.onrender.com/api/auth/me` (token ile)
-
-## 8) Sik gorulen sorunlar
-
-- 401/403:
-  - Token yok ya da gecersiz olabilir.
-- CORS hatasi:
-  - `AllowedOrigins` frontend URL ile birebir ayni olmali.
-- Frontend API'ye gidemiyor:
-  - `VITE_API_URL` yanlis veya frontend redeploy edilmedi.
-- DB baglanti hatasi:
-  - `ConnectionStrings__DefaultConnection` Render DB'den bagli mi kontrol et.
-
-## 9) Kisa komut notu (lokal dogrulama)
+## 8) Lokal gelistirme
 
 Backend:
 
@@ -92,15 +60,17 @@ cd backend/GymManagement.API
 dotnet run --urls "http://localhost:5000"
 ```
 
-Frontend:
+Frontend (Vite proxy `/api`):
 
 ```powershell
 cd frontend
 npm run dev
 ```
 
-Local env:
+Lokal production build testi (API 5000’de):
 
-```env
-VITE_API_URL=http://localhost:5000/api
+```powershell
+cd frontend
+$env:VITE_API_URL="http://localhost:5000"
+npm run build
 ```
