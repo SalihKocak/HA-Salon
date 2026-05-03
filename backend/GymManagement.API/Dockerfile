@@ -14,8 +14,8 @@ RUN dotnet publish GymManagement.API/GymManagement.API.csproj -c Release -o /app
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
-ENV ASPNETCORE_URLS=http://0.0.0.0:10000
-EXPOSE 10000
+# Render sets PORT at runtime; Program.cs binds http://0.0.0.0:{PORT}
+EXPOSE 8080
 
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "GymManagement.API.dll"]
