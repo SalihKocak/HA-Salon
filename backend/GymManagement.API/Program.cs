@@ -43,8 +43,10 @@ if (connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCas
     if (string.IsNullOrWhiteSpace(database))
         throw new InvalidOperationException("Database URL must include a database name in the path.");
 
+    // postgresql://host/db without :5432 yields Uri.Port == -1; Npgsql rejects that.
+    var port = uri.Port > 0 ? uri.Port : 5432;
     connectionString =
-        $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+        $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
 }
 
 builder.Services.AddDbContext<AppDbContext>(options =>
