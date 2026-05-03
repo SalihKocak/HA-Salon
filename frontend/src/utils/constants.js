@@ -1,4 +1,8 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+/** Render: set VITE_API_URL to API origin only (e.g. https://gym-api.onrender.com); `/api` is appended. Local dev: unset → Vite proxy `/api`. */
+const viteApiOrigin = import.meta.env.VITE_API_URL;
+export const API_BASE_URL = viteApiOrigin
+  ? `${String(viteApiOrigin).replace(/\/+$/, '')}/api`
+  : '/api';
 
 export const ROLES = {
   ADMIN: 'Admin',
